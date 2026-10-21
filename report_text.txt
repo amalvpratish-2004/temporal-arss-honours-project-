@@ -1,0 +1,912 @@
+      TEMPORAL ARSS: TIME-AWARE
+         ANONYMOUS REWEIGHTED
+
+     SUBGRAPH SAMPLING FOR LINK
+                       PREDICTION
+
+                              A Project Report Submitted
+                      in Partial Fulfilment of the Requirements
+
+                                      for the Degree of
+
+        Bachelor of Technology (Honours)
+
+                                                in
+
+              Computer Science and Engineering
+
+                                               by
+
+                             Amal V Pratish
+                      (Roll No. 2023BCS0004)
+
+                                       to
+
+DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
+   INDIAN INSTITUTE OF INFORMATION TECHNOLOGY
+                           KOTTAYAM-686635, INDIA
+                                          April 2026
+                            DECLARATION
+
+I, Amal V Pratish (Roll No: 2023BCS0004), hereby declare that, this
+report entitled "Temporal ARSS: Time-Aware Anonymous Reweighted
+Subgraph Sampling for Link Prediction" submitted to Indian Institute
+of Information Technology Kottayam towards partial requirement of Bache-
+lor of Technology (Honours) in Computer Science and Engineering
+is an original work carried out by me under the supervision of Dr Suchithra
+M S and has not formed the basis for the award of any degree or diploma,
+in this or any other institution or university. I have sincerely tried to up-
+hold the academic ethics and honesty. Whenever an external information
+or statement or result is used then, that have been duly acknowledged and
+cited.
+
+Kottayam-686635      Amal V Pratish
+April 2026
+
+                 ii
+                             CERTIFICATE
+
+This is to certify that the work contained in this project report entitled
+"Temporal ARSS: Time-Aware Anonymous Reweighted Subgraph
+Sampling for Link Prediction" submitted by Amal V Pratish (Roll
+No: 2023BCS0004) to the Indian Institute of Information Technology Kot-
+tayam towards partial requirement of Bachelor of Technology (Honours)
+in Computer Science and Engineering has been carried out by him/her
+under my supervision and that it has not been submitted elsewhere for the
+award of any degree.
+
+Kottayam-686635       (Dr Suchithra M S)
+April 2026             Project Supervisor
+
+                 iii
+                        ABSTRACT
+
+    Link prediction is the inferring of missing or future edges in a graph. It has
+applications in social network analysis, recommender systems, network secu-
+rity, etc. The ARSS model (Anonymous Reweighted Subgraph Sampling)
+overcomes two key limitations of existing graph neural network algorithms -
+the failure of standard message passing to distinguish nodes with identical
+subtrees but different subgraph structure, and the inability to discriminate
+common neighbours with different features. ARSS introduces a reweighted
+structural similarity measure and a breadth-then-depth subgraph sampling
+strategy to select the most informative neighbours for each target node.
+
+    In this project, we make two main contributions. First, we implement
+a base model for the ARSS on the Wikipedia JODIE temporal dataset,
+a bipartite graph of 157,474 user-page interactions, using a chronological
+train/val/test split, achieving a test AUC of 0.9026 and test AP of 0.8994.
+Then, we implement the Temporal ARSS which is an extension of the ARSS
+incorporating time-decay, penalising old interactions during subgraph sam-
+pling without adding any new model parameters or modifying the GNN or
+link predictor. The base model for temporal ARSS showed that incorporat-
+ing temporal recency improves test AUC to 0.9142 and test AP to 0.9194.
+The small margin between the two models indicates that structural similar-
+ity is the dominating predictive signal on this dataset compared to temporal
+recency which provides a consistent secondary benefit.
+
+                                                iv
+Contents
+
+1 Introduction          1
+
+1.1 Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1
+
+1.1.1 Problem Formulation . . . . . . . . . . . . . . . . . . . 2
+
+1.2 Objectives . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2
+
+1.3 Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+
+2 Literature Review     4
+
+2.1 Heuristic Methods . . . . . . . . . . . . . . . . . . . . . . . . 4
+
+2.2 Graph Neural Networks for Link Prediction . . . . . . . . . . 5
+
+2.3 Structural Feature Methods . . . . . . . . . . . . . . . . . . . 6
+
+2.4 The ARSS Model . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+2.5 Temporal Graph Methods . . . . . . . . . . . . . . . . . . . . 8
+
+3 Methodology           10
+
+3.1 Dataset: Wikipedia JODIE . . . . . . . . . . . . . . . . . . . 10
+
+3.2 Base ARSS Implementation . . . . . . . . . . . . . . . . . . . 12
+
+3.2.1 Reweighted Similarity . . . . . . . . . . . . . . . . . . 12
+
+3.2.2 Breadth-then-Depth Subgraph Sampling . . . . . . . . 13
+
+                     v
+      3.2.3 Anonymous Subgraph Construction . . . . . . . . . . . 13
+      3.2.4 Message Passing and Link Prediction . . . . . . . . . . 14
+      3.2.5 Hyperparameters . . . . . . . . . . . . . . . . . . . . . 16
+3.3 Temporal ARSS: Extension to Dynamic Graphs . . . . . . . . 16
+      3.3.1 Motivation . . . . . . . . . . . . . . . . . . . . . . . . . 16
+      3.3.2 Temporal Reweighting . . . . . . . . . . . . . . . . . . 17
+      3.3.3 Tscale and  Interpretation . . . . . . . . . . . . . . . . 17
+
+4 Experiments                 18
+
+4.1 Evaluation Protocol . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+4.2 Base ARSS Experiment . . . . . . . . . . . . . . . . . . . . . 19
+
+4.3 Temporal ARSS Experiment . . . . . . . . . . . . . . . . . . . 19
+
+5 Results and Discussion      21
+
+5.1 Base ARSS Results . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+5.2 Temporal ARSS Results . . . . . . . . . . . . . . . . . . . . . 21
+
+5.3 Comparison . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+5.4 Discussion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+5.4.1 Why Temporal Decay Helps . . . . . . . . . . . . . . . 22
+
+5.4.2 Structural Dominance and the Limits of Temporal Signal 23
+
+5.4.3 The Bipartite Common-Neighbour Problem . . . . . . 24
+
+5.4.4 Training Efficiency . . . . . . . . . . . . . . . . . . . . 24
+
+5.5 Conclusion and Future Work . . . . . . . . . . . . . . . . . . . 25
+
+Bibliography                  26
+
+                          vi
+Chapter 1
+
+Introduction
+
+1.1 Introduction
+
+Link prediction is the problem of inferring missing or future edges in a graph
+[8]. It sounds straightforward but is difficult, especially as graphs grow large
+and their structure becomes complex. It has a lot of applications such as
+in social networks, recommender systems, knowledge graphs, even biological
+interaction networks where predicting protein­protein interactions can help
+in drug development.
+
+    The factor that makes link prediction harder is including the temporal
+aspect as real world networks always keep changing and evolving. Edges
+appear and disappear, and the sequence of interactions often matters as
+much as which interactions occurred. A user who edited a Wikipedia page
+last week has higher chance of editing it again than someone who made a
+single edit two years ago. Most graph learning methods ignore this and they
+work on a static snapshot and treat all edges as equally current.
+
+                                                1
+    We work with the ARSS model [17] which is a recently proposed GNN-
+based approach for link prediction, and extend it to the temporal setting.
+In this project first is the implementation of the base ARSS model on the
+temporal Wikipedia JODIE dataset [7], and then implement a base model
+for Temporal ARSS on the same dataset, our extension that incorporates
+time-decay into the sampling step.
+
+1.1.1 Problem Formulation
+
+Formally, given a graph G = (V, E) where V is the node set and E is the edge
+set, we want to estimate the probability of an edge between any pair vi, vj:
+
+E^ij = f (H)  (1.1)
+
+where H is the matrix of node representations from message passing and f
+is a link scoring function.
+
+    In the temporal case, each edge also has a timestamp. The evaluation pro-
+tocol is chronological -- training edges come first, then validation, then test
+-- so the model has to predict future interactions using only what happened
+in the past. Thus replicating real world networks.
+
+1.2 Objectives
+
+   1. Implement Base ARSS faithfully from [17], evaluated on Wikipedia
+       JODIE [7] with a chronological split.
+
+   2. Propose Temporal ARSS: modify the reweighting function wik to in-
+                                                2
+       corporate time-decay at the sampling stage, without changing anything
+       else.
+
+   3. Evaluate both models on AUC and Average Precision and sweep  to
+       find the best decay rate.
+
+   4. Analyse what the results say about the relative contribution of struc-
+       tural versus temporal signal on this dataset.
+
+1.3 Contributions
+
+   1. A paper-faithful Base ARSS implementation on Wikipedia JODIE, giv-
+       ing a static baseline of test AUC 0.9026 and test AP 0.8994.
+
+   2. Temporal ARSS, which replaces the static wik with witkemporal = wik ·
+       exp(+ · t/Tscale), adding temporal recency bias to the sampling step
+       with zero new parameters.
+
+   3. Empirical evidence that  = 10.0 achieves test AUC 0.9142 -- a real
+       improvement, though a modest one. The small gap between the two
+       models turns out to say something interesting about this dataset: struc-
+       tural similarity appears to be the dominant signal, with temporal re-
+       cency playing a secondary role, largely because the interaction patterns
+       are highly repetitive.
+
+   4. An analysis of the bipartite common-neighbour problem -- a funda-
+       mental mismatch between ARSS and bipartite graphs that quietly dis-
+       ables part of the link representation throughout both experiments.
+
+                                                3
+Chapter 2
+
+Literature Review
+
+2.1 Heuristic Methods
+
+The earliest approaches to link prediction used handcrafted similarity scores.
+Common Neighbours (CN) [9] just counts how many neighbours two nodes
+share. Preferential Attachment (PA) multiplies their degrees. These are
+simple computations and easy to interpret, but they are completely rigid
+i.e. the similarity function is fixed by hand and cannot adapt to different
+datasets.
+
+    Second-order heuristics are better by deciding and using only the required
+common neighbours. Adamic-Adar (AA) [1] weighs common neighbours in-
+versely by log-degree, so two nodes sharing a rare neighbour are considered
+more similar than two nodes sharing a major hub. Resource Allocation (RA)
+is similar but distributes a unit resource through shared neighbours rather
+than summing log-inverse degrees. The Katz index sums up all paths between
+a node pair with exponential decay on path length.
+
+                                                4
+    These methods work reasonably well on small, sparse graphs. The lim-
+itations become clear when the graph gets large, or when you want to in-
+corporate node features, or when you try to transfer a model trained on one
+graph to another none of which is possible with fixed heuristics.
+
+2.2 Graph Neural Networks for Link Predic-
+
+       tion
+
+GNNs [3] replaced handcrafted features with learned representations. The
+basic idea is to iteratively aggregate information from a node's neighbour-
+hood, producing an embedding that reflects both its own features and its
+local graph context. GCN [6] applies a spectral convolution normalised by
+the node degrees. GAT [11] adds a learned attention mechanism so the model
+can decide which neighbours require more attention. GraphSAGE [4] samples
+a fixed number of neighbours and aggregates them, which makes it practi-
+cal for large graphs. GAE [5] wraps a GCN encoder with an inner-product
+decoder for link prediction specifically.
+
+    The problem is that all of these perform message passing over rooted sub-
+trees. Each node aggregates from its immediate neighbourhood, but there
+is no mechanism to capture how a node's neighbours are connected to each
+other. Two nodes can have completely identical subtree representations while
+sitting in very different local subgraph structures and the GNN cannot tell
+them apart [16]. For link prediction, where the connection pattern between
+two target nodes' neighbourhoods is exactly what matters, this is a mean-
+ingful limitation.
+
+                                                5
+2.3 Structural Feature Methods
+
+A range of methods have tried to address this by explicitly incorporating
+subgraph-level structure into the learning process.
+
+    SEAL [15] was one of the first. It extracts the enclosing subgraph around
+each candidate edge and assigns unique integer labels to nodes using Double-
+Radius Node Labelling (DRNL) based on each node's distances to the two
+target nodes. A GNN then runs on these labelled subgraphs. This is expres-
+sive, but the per-edge subgraph extraction is expensive and does not scale
+easily to large graphs.
+
+    NGNN [16] constructs rooted subgraphs that capture all edges in the
+h-hop neighbourhood rather than just tree paths, which helps without re-
+quiring full subgraph extraction. Neo-GNN [14] computes neighbourhood
+overlap scores as structural features and concatenates them with GNN em-
+beddings. BUDDY [2] approximates these structural features using sketch-
+ing, which makes the approach much more scalable. NCN [12] uses common
+neighbour representations as structural features, passing the embeddings of
+shared neighbours directly into the link predictor.
+
+2.4 The ARSS Model
+
+ARSS [17] is most recent development. It identifies two specific problems:
+first, that standard message passing treats all neighbours as equally informa-
+tive; second, that common neighbours with different structural roles are not
+
+                                                6
+distinguished from each other. Its response is a reweighted similarity score:
+
+                       wik  =              2ik            (2.1)
+                                          1 + ik
+
+Lower wik means higher structural similarity and higher sampling priority.
+The two components are computed as follows.
+
+    The popularity score ik measures how well-connected the two nodes are
+relative to the most connected node in the graph:
+
+                   ik  =  (di) + (dk)                     (2.2)
+                             2(dmax)
+
+where di is the degree of node vi, dmax is the maximum degree in the graph,
+and (x) = log(1 + x) is a log-nonlinearity that dampens the effect of very
+
+high degrees. ik lies in [0, 1]: two hub nodes give a value close to 1, two
+low-degree nodes give a value close to 0. High ik increases wik, pushing
+
+the edge down the priority list -- hub-to-hub connections are common and
+
+therefore less structurally distinctive.
+
+The attraction score ik captures the quality of shared neighbours between
+
+vi and vk:
+
+            ik  =  1  -                            (du)   (2.3)
+                                                  (dmax)
+                         vuN (vi)N (vk)
+
+For each common neighbour vu, the term (du)/(dmax) is close to 1 if vu is
+a hub and close to 0 if vu is a rare low-degree node. Taking the product and
+subtracting from 1 means that even one rare common neighbour drives ik
+close to 1 -- strong attraction -- while sharing only hubs leaves ik near 0. If
+there are no common neighbours, the product over an empty set evaluates to
+
+                                          7
+1 by convention, giving ik = 1-1 = 0. High ik decreases wik by inflating the
+denominator, raising the priority of pairs that share structurally meaningful
+common neighbours.
+
+    A breadth-then-depth sampling strategy then uses these scores to select
+the K most structurally close neighbours for each target node. Node labels
+are stripped before passing to the GNN and replaced with role encodings --
+source, target, common neighbour, and so on -- so the model cannot just
+memorise node identities.
+
+    The link representation combines the Hadamard product of the two target
+embeddings with a sum over common neighbour embeddings:
+
+zij = hi  hj                    hu  (2.4)
+
+               vuN (vi)N (vj )
+
+This feeds into an MLP with sigmoid activation for the final probability.
+    The paper evaluates ARSS on Cora and Citeseer -- both static homoge-
+
+neous citation graphs. The authors note in their limitations: "we develop the
+ARSS model on static networks, while real networks often evolve with time.
+Developing our approach to temporal networks would be more insightful and
+be applicable for real situation" [17]. This project is a continuation for that.
+
+2.5 Temporal Graph Methods
+
+TGN [10] and TGAT [13] are the two most widely referenced methods for
+temporal link prediction. TGN keeps a memory state for every node that gets
+updated with each interaction, so representations at inference time reflect
+
+               8
+recent history. TGAT uses temporal attention with a learnable time encoding
+that captures how long ago past interactions occurred. Both work well but
+involve non-trivial architectural changes -- the memory module in TGN in
+particular adds significant complexity.
+
+    The approach here is different. Rather than modifying the architecture,
+we ask whether adding temporal awareness at the sampling stage is enough
+-- just changing which neighbours get prioritised, before the GNN ever runs.
+This keeps the two phases of the project directly comparable and makes it
+easy to attribute any performance difference to the temporal signal alone.
+
+                                                9
+Chapter 3
+
+Methodology
+
+3.1 Dataset: Wikipedia JODIE
+
+The Wikipedia dataset from JODIE [7] records one month of editing activity
+on Wikipedia as a bipartite temporal graph. Users are on one side, pages on
+the other, and each edge represents a user editing a page at a specific time.
+
+    · Nodes: 8,227 users and 9,227 pages (17,454 total)
+    · Edges: 157,474 timestamped editing events
+    · Edge features: 172-dimensional LIWC (Linguistic Inquiry and Word
+
+       Count) features per edit, capturing linguistic and psychological prop-
+       erties of the text in each edit
+    · Time range: Approximately 30 days (timestamps 0­2,678,373 sec-
+       onds)
+
+                                               10
+Figure 3.1: Wikipedia (JODIE) dataset exploration. Left: Edit activity
+over time -- broadly uniform with no major spikes, suggesting consistent
+usage throughout the month. Centre: User interaction frequency (log scale)
+showing the heavy-tailed distribution: most users edit very rarely, a small
+number edit hundreds of times. Right: Distribution of the first LIWC feature
+dimension, illustrating how sparse the edge features are.
+
+    Looking at the degree distribution in Figure 3.1, pages are edited far more
+than individual users edit: mean page degree is 115.8 (max 1,332) vs mean
+user degree of 16.9 (max 1,131). More striking is that the 110,231 training
+interactions come from only 13,545 unique user-page pairs -- so on average
+each pair appears about 8 times. That repetition is worth keeping in mind;
+it becomes relevant when interpreting the results.
+
+    We use a chronological 70/15/15 split: 110,231 training edges, 23,620
+validation, 23,623 test. The split is by timestamp so no future information
+leaks into training. Edge features are standardised using training set statis-
+tics only.
+
+                                               11
+3.2 Base ARSS Implementation
+
+3.2.1 Reweighted Similarity
+
+The core idea in ARSS is that not all neighbours are equally informative --
+
+structurally similar neighbours should be sampled with higher priority. For
+
+each training edge (vi, vk), we precompute a similarity score wik. First, the
+
+popularity score:
+
+                          ik  =  (di) + (dk)            (3.1)
+                                    2(dmax)
+
+where (x) = log(1 + x) and di is the degree of vi. Then the attraction score
+from shared neighbours:
+
+                   ik  =  1  -                   (du)   (3.2)
+                                                (dmax)
+                                vuN (vi)N (vk)
+
+If there are no common neighbours, ik = 0. Combined:
+
+                              wik  =   2ik              (3.3)
+                                      1 + ik
+
+    Lower wik means higher structural similarity, higher sampling priority.
+All values are precomputed once before training begins -- 27,090 pairs on
+Wikipedia.
+
+                                   12
+3.2.2 Breadth-then-Depth Subgraph Sampling
+
+For a target node vi and budget K, we build its neighbourhood using the
+breadth-then-depth rule. At hop h, let Nvhi be the new candidates:
+
+                          if |vhi-1| + |Nvhi|  K   (3.4)
+                          if |hvi-1| + |Nvhi| > K
+vhi = hvi-1  Nvhi
+        vhi-1  RS(Nvhi )
+
+where RS(·) takes the top candidates by ascending wik. All 1-hop neighbours
+get priority; the search only goes deeper if budget remains. In practice on
+Wikipedia, users have mean degree 17 which is comfortably above K = 10
+at 1-hop, so the algorithm almost always fills the budget with 1-hop.
+
+3.2.3 Anonymous Subgraph Construction
+
+After sampling, node identities are stripped. Each node gets a one-hot struc-
+tural role:
+
+                    Role Meaning
+                       0 Source vi
+                       1 Target vj
+                       2 Common neighbour (N (vi)  N (vj))
+                       3 Source-only (N (vi) \ N (vj))
+                       4 Target-only (N (vj) \ N (vi))
+
+    This forces the GNN to reason from topology rather than memorising
+node identities.
+
+13
+3.2.4 Message Passing and Link Prediction
+
+Each anonymous subgraph is processed by a two-layer GraphSAGE encoder
+[4]. GraphSAGE was chosen over GCN [6] because it supports inductive
+learning -- the same model can generalise to nodes and edges not seen dur-
+ing training, which matters here since validation and test edges involve the
+same nodes but at different times. At each layer l, every node aggregates
+messages from its neighbours via mean pooling and applies a learnable linear
+transformation:
+
+               hvl =  W l · concat hvl-1, MeanuN (v)hul-1   (3.5)
+
+where W l is a weight matrix and  is a ReLU activation. Layer normalisation
+
+and dropout (rate 0.3) are applied after each layer. The two layers have
+
+dimensions 5  128  64, where the input dimension of 5 corresponds to
+
+the one-hot structural role encoding.
+
+    After message passing, the embedding for target node vi is obtained by
+mean pooling over all node representations in its subgraph (Equation 7 of
+
+[17]):
+
+               hi = Mean(hpL,GiK | vp  GKi )                (3.6)
+
+The link representation then concatenates the Hadamard product of the
+
+two target embeddings with the sum of any common neighbour embeddings
+
+(Equation 8):
+
+               zij = hi  hj                             hu  (3.7)
+
+                                       vuN (vi)N (vj )
+
+The Hadamard product hi  hj captures element-wise agreement between
+
+                                       14
+the two target node representations, while the common neighbour sum pro-
+
+vides structural discrimination -- nodes that share informative neighbours
+
+contribute positively to the score. The concatenated vector zij has dimension
+64 + 64 = 128.
+
+This is passed through a three-layer MLP with sigmoid activation (Equa-
+
+tion 9):
+
+          E^ij = sigmoid(MLP(zij))  (3.8)
+
+The MLP has hidden dimensions 128  64  1, with ReLU activations
+and dropout between layers. Training uses binary cross-entropy (BCE) loss
+[?] against random negative samples, where for each positive edge (vi, vj) a
+negative destination is sampled uniformly at random from all possible nodes.
+The total number of trainable parameters across the GNN and MLP is 43,073.
+
+          15
+3.2.5 Hyperparameters
+
+Hyperparameter Value
+
+Subgraph size K        10
+
+GNN layers L           2
+
+Embedding dimension 64
+
+Hidden dimension       128
+
+Dropout                0.3
+
+Batch size             512
+
+Epochs                 15
+
+Learning rate          3 × 10-4
+
+Optimiser              Adam (weight decay 10-5)
+
+LR scheduler           CosineAnnealingLR
+
+3.3 Temporal ARSS: Extension to Dynamic
+       Graphs
+
+3.3.1 Motivation
+
+The ARSS paper explicitly lists temporal extension as future work [17]. In-
+stead of adding a memory module or redesigning the architecture as in TGN
+[10] or TGAT [13], the approach here is simpler: change which neighbours get
+selected at sampling time. If recent interactions are prioritised when build-
+ing the subgraph, the GNN receives a neighbourhood that already reflects
+the node's current context -- without any change to the model architecture
+itself.
+
+                       16
+3.3.2 Temporal Reweighting
+
+For a query at time tquery, with the last known interaction between vi and vk
+
+at time tlast[i][k]:
+
+                      witkemporal = wik · exp         t           (3.9)
+                                               + ·
+
+                                                     Tscale
+
+where t = tquery - tlast[i][k],  > 0 is the decay rate, and Tscale = 1,862,645
+seconds (the training time span) normalises t to [0, 1].
+
+    The positive sign matters: since lower wik means higher priority, mul-
+tiplying by exp(+ · t/Tscale) inflates old edges and pushes them down
+the ranking. Recent edges (small t) are barely affected. Edges with no
+
+timestamp at all are assigned infinite score and sampled last. The subgraph
+
+builder, GNN, and link predictor are all identical to Base ARSS.
+
+3.3.3 Tscale and  Interpretation
+
+At  = 1.0, the oldest possible training edge gets its score inflated by
+e1.0  2.72× -- a moderate push down the priority list. At  = 10.0,
+that becomes e10  22,026×, which basically removes all but the very most
+recent neighbours from consideration. Whether that is appropriate depends
+on how bursty the editing behaviour is.
+
+                      17
+Chapter 4
+
+Experiments
+
+4.1 Evaluation Protocol
+
+Area Under the ROC Curve (AUC) measures the model's ability to rank
+positive edges above negative ones -- a score of 0.5 is random and 1.0 is
+perfect. Average Precision (AP) summarises the precision-recall curve and
+is more sensitive to the model's ranking of true positives near the top of the
+score list, making it particularly informative when positive edges are rare
+relative to all possible node pairs [?]. Both metrics are computed against
+randomly sampled negative edges, one negative per positive.
+
+    All models are trained from scratch for 15 epochs with a chronological
+70/15/15 train/val/test split, using identical hyperparameters unless stated
+otherwise. The best checkpoint by validation AUC is used for final test
+evaluation.
+
+                                               18
+4.2 Base ARSS Experiment
+
+The Base ARSS model is implemented faithfully from [17] and evaluated on
+the Wikipedia JODIE dataset [7] using a chronological split. We use K = 10
+for the subgraph budget.
+
+Figure 4.1: Base ARSS training on Wikipedia JODIE. Loss drops sharply
+in the first few epochs then plateaus -- typical BCE behaviour once logit
+magnitudes get large. Validation AUC stays stable around 0.91­0.92 after
+the first couple of epochs, peaking at 0.9190 at epoch 11.
+
+    Training converges fast, as Figure 4.1 shows. Loss drops from 0.321 to
+around 0.050 within four epochs and barely moves after that. The early
+plateau is typical for BCE loss without label smoothing: once logit magni-
+tudes exceed roughly ±4, the sigmoid saturates and gradients become very
+small, so the model effectively stops learning. The validation metrics are
+stable throughout -- no real evidence of overfitting.
+
+4.3 Temporal ARSS Experiment
+
+Both  values were trained from scratch for 15 epochs with identical hyper-
+parameters to Base ARSS. We sweep   {1.0, 10.0} to characterise the effect
+
+                                               19
+of decay rate.
+
+Figure 4.2: Temporal ARSS ( = 10.0) training curves. The slower initial
+rise in validation metrics compared to Base ARSS (Figure 4.1) reflects the
+stronger resampling pressure -- the model takes longer to settle into the new
+neighbour distribution before it can learn effectively from it.
+
+    Both values improve on Base ARSS, as shown in Figure 4.2. The gap
+between  = 1.0 and  = 10.0 is essentially nothing (0.0004 AUC), which is
+honestly hard to read much into given the variance in training. What does
+seem clear is that any temporal decay helps -- the jump from Base ARSS
+validation AUC (0.9190) to either Temporal ARSS configuration (0.933)
+is consistent across both metrics and both  values. Notably,  = 10.0
+converges to its best epoch earlier (epoch 11 vs 13), suggesting the more ag-
+gressive decay produces a cleaner learning signal by more decisively filtering
+out stale edges.
+
+                                               20
+Chapter 5
+Results and Discussion
+
+5.1 Base ARSS Results
+
+      Metric Validation Test
+
+      AUC     0.9190 0.9026
+
+      AP      0.9172 0.8994
+
+    The 1.6 percentage point val-to-test AUC gap is normal and expected on
+a dataset of this scale. We use K = 10 for both models.
+
+5.2 Temporal ARSS Results
+
+ Best Val AUC Best Val AP Best Epoch
+
+1.0   0.9328      0.9358      13
+
+10.0  0.9332      0.9362      11
+
+              21
+5.3 Comparison
+
+Model           Val AUC Val AP Test AUC Test AP
+
+Base ARSS       0.9190 0.9172 0.9026  0.8994
+
+Temporal ARSS ( = 10.0) 0.9332 0.9362 0.9142 0.9194
+
+Improvement     +0.0142 +0.0190 +0.0116 +0.0200
+
+    Temporal ARSS wins on all four metrics, with the entire improvement
+coming from the sampling step since nothing else changed. But the headline
+number is that Base ARSS already achieves 0.9026 test AUC without know-
+ing anything about timestamps. That is hard to ignore. Whether it means
+temporal signal is weak here, or just that structure is unusually strong, should
+be looked into.
+
+5.4 Discussion
+
+5.4.1 Why Temporal Decay Helps
+
+Wikipedia editing is bursty. Users go through phases of activity on particular
+pages rather than editing uniformly over time. A Base ARSS subgraph mixes
+edges from across the whole training period without distinguishing how re-
+cent they are, which is a bit like averaging someone's editing behaviour over
+two years and using that to predict what they will do today. Temporal
+ARSS pushes the subgraph towards recent history, which tends to be more
+predictive of near-future behaviour.
+
+    The preference for  = 10.0 over  = 1.0 (small as the gap is) suggests
+
+                                               22
+that on this dataset, fairly aggressive recency weighting is appropriate --
+recent interactions matter much more than old ones.
+
+5.4.2 Structural Dominance and the Limits of Tempo-
+          ral Signal
+
+The result that probably deserves the most attention is not Temporal ARSS
+at all -- it is that Base ARSS gets to 0.9026 test AUC without any temporal
+information.
+
+    There are two reasons this probably happens. The first is the repeti-
+tion structure of the dataset. With 110,231 training events over only 13,545
+unique pairs, most future interactions are simply repeats of past ones. A
+model that learns structural similarity well will get most of those right with-
+out needing to know when the last interaction was -- the temporal signal is
+redundant when you can already predict from pattern alone.
+
+    The second reason is the bipartite limitation discussed in Section 5.4.3.
+Both models are working with a partially disabled link representation -- the
+common-neighbour term is always zero. It is hard to say whether temporal
+decay would show a clearer advantage on top of a fully-functioning structural
+representation, because we never actually test that.
+
+    So the conclusion is not that Wikipedia JODIE has a weak temporal
+structure. For the link prediction task, with this model, on this graph, know-
+ing who interacted with whom historically is more predictive than knowing
+when.
+
+                                               23
+5.4.3 The Bipartite Common-Neighbour Problem
+
+ARSS was designed for homogeneous graphs. In Cora or Citeseer, two pa-
+pers can share citing papers as common neighbours, and those common
+neighbours are central to the link representation. On a bipartite graph like
+Wikipedia, a user's neighbours are all pages and a page's neighbours are all
+users -- so any user-page pair has zero first-order common neighbours by
+construction.
+
+    The consequence is that the second term in:
+
+zij = hi  hj                    hu
+
+               vuN (vi)N (vj )
+
+is always a zero vector. Half the link representation is dead weight throughout
+every experiment in this project. The model is essentially just doing zij =
+hi  hj plus zeros, which is weaker than intended.
+
+    A more suitable evaluation would be on a homogeneous temporal dataset
+-- something like a temporal version of Cora or Citeseer (datasets used in
+the original paper of ARSS) -- where common neighbours between target
+nodes naturally exist and the full link representation can actually be used.
+
+5.4.4 Training Efficiency
+
+Training took 117­120 seconds per epoch on an RTX 3050 6GB, across 216
+batches of 512 edges. The bottleneck is subgraph construction rather than
+the GNN itself. Because user degrees (mean 17) fall under K = 10 at 1-hop,
+the algorithm almost always expands to 2-hop, where the frontier can reach
+17 × 116  1,970 candidates -- many not in the precomputed wik cache.
+
+                                               24
+Temporal ARSS adds only an exp(·) call per neighbour, which is negligible.
+
+5.5 Conclusion and Future Work
+
+The project has two concrete outputs. First, a paper-faithful Base ARSS
+on Wikipedia JODIE: test AUC 0.9026, test AP 0.8994. Second, Temporal
+ARSS, which penalises stale interactions at sampling time with no architec-
+tural changes, reaching test AUC 0.9142 and test AP 0.9194. The improve-
+ment is real but modest, and the more interesting finding is probably what it
+reveals about the dataset: structural similarity dominates, temporal recency
+helps but is secondary, and the bipartite graph structure has been silently
+disabling part of the link representation throughout.
+
+    Future work: try implementing second-order common neighbours to fix
+the bipartite problem; running a wider  sweep to better characterise the
+decay rate sensitivity; making  learnable rather than fixed. A longer-term
+direction would be combining the sampling-stage temporal approach here
+with a memory module like TGN [10] -- that combination might perform
+better on datasets where the temporal signal is stronger.
+
+                                               25
+Bibliography
+
+ [1] Lada A. Adamic and Eytan Adar. Friends and neighbors on the web.
+      Social Networks, 25(3):211­230, 2003.
+
+ [2] Benjamin Paul Chamberlain, Sergey Shirobokov, Emanuele Rossi, Fab-
+      rizio Frasca, Thomas Markovich, Nils Hammerla, Michael M. Bronstein,
+      and Max Hansmire. Graph neural networks for link prediction with
+      subgraph sketching. arXiv preprint arXiv:2209.15486, 2022.
+
+ [3] Justin Gilmer, Samuel S. Schoenholz, Patrick F. Riley, Oriol Vinyals,
+      and George E. Dahl. Neural message passing for quantum chemistry.
+      In International Conference on Machine Learning (ICML), pages 1263­
+      1272, 2017.
+
+ [4] Will Hamilton, Zhitao Ying, and Jure Leskovec. Inductive represen-
+      tation learning on large graphs. In Advances in Neural Information
+      Processing Systems (NeurIPS), pages 1024­1034, 2017.
+
+ [5] Thomas N. Kipf and Max Welling. Variational graph auto-encoders. In
+      NeurIPS Workshop on Bayesian Deep Learning, 2016.
+
+                                               26
+ [6] Thomas N. Kipf and Max Welling. Semi-supervised classification with
+      graph convolutional networks. In International Conference on Learning
+      Representations (ICLR), 2017.
+
+ [7] Srijan Kumar, Xikun Zhang, and Jure Leskovec. Predicting dynamic em-
+      bedding trajectory in temporal interaction networks. In ACM SIGKDD
+      International Conference on Knowledge Discovery and Data Mining,
+      pages 1269­1278, 2019.
+
+ [8] David Liben-Nowell and Jon Kleinberg. The link prediction problem for
+      social networks. In Proceedings of the Twelfth International Conference
+      on Information and Knowledge Management, pages 556­559, 2003.
+
+ [9] Mark E. J. Newman. Clustering and preferential attachment in growing
+      networks. Physical Review E, 64:025102, 2001.
+
+[10] Emanuele Rossi, Ben Chamberlain, Fabrizio Frasca, Davide Eynard,
+      Federico Monti, and Michael Bronstein. Temporal graph networks for
+      deep learning on dynamic graphs. In ICML 2020 Workshop on Graph
+      Representation Learning, 2020.
+
+[11] Petar Velickovi´c, Guillem Cucurull, Arantxa Casanova, Adriana
+      Romero, Pietro Li`o, and Yoshua Bengio. Graph attention networks.
+      arXiv preprint arXiv:1710.10903, 2017.
+
+[12] Xiyuan Wang, Haotong Yang, and Muhan Zhang. Neural com-
+      mon neighbor with completion for link prediction. arXiv preprint
+      arXiv:2302.00890, 2023.
+
+                                               27
+[13] Da Xu, Chuanwei Ruan, Evren Korpeoglu, Sushant Kumar, and Kan-
+      nan Achan. Inductive representation learning on temporal graphs. In
+      International Conference on Learning Representations (ICLR), 2020.
+
+[14] Seongjun Yun, Seoyoon Kim, Junhyun Lee, Jaewoo Kang, and Hyun-
+      woo J. Kim. Neo-GNNs: Neighborhood overlap-aware graph neural net-
+      works for link prediction. In Advances in Neural Information Processing
+      Systems (NeurIPS), pages 13683­13694, 2021.
+
+[15] Muhan Zhang and Yixin Chen. Link prediction based on graph neu-
+      ral networks. In Advances in Neural Information Processing Systems
+      (NeurIPS), pages 5165­5175, 2018.
+
+[16] Muhan Zhang and Pan Li. Nested graph neural networks. In Advances in
+      Neural Information Processing Systems (NeurIPS), pages 15734­15747,
+      2021.
+
+[17] Xiaoran Zhang, Yuexing Han, Bing Wang, and Xikun Huang. Anony-
+      mous reweighted subgraph sampling-based graph neural networks for
+      link prediction. Chaos, Solitons and Fractals, 203:117693, 2026.
+
+                                               28
+
